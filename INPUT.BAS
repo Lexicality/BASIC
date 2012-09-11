@@ -1,0 +1,3 @@
+10 INPUT A$, B, C(1)
+20 PRINT A$, B, C(1)
+30 END
