@@ -304,21 +304,23 @@ do -- Lines
         ["PRINT" .. space_expr .. expression_expr] = function(expr)
             local exprs = split_exprs(expr);
             for k, expr in pairs(exprs) do
-                if (expr ~= ',' and expr ~= ';') then
+                if (expr ~= '' and expr ~= ',' and expr ~= ';') then
                     exprs[k] = expression(expr);
                 end
             end
             return function()
                 local toprint = {};
                 -- FIXME: Formatting is supposed to be more complex than this
+                -- FIXME: if head(exprs) = ';' or ',' then no \n at the end
                 -- TODO: Support TAB()
                 for _, expr in ipairs(exprs) do
-                    if (expr == ",") then
+                    if (expr == ',') then
                         push(toprint, '\t');
-                    elseif (expr == ";") then
-                        push(toprint, '');
-                    else
-                        push(toprint, expr());
+                    elseif (expr ~= ';' and expr ~= '') then
+                        expr = expr();
+                        if (expr ~= '') then
+                            push(toprint, expr);
+                        end
                     end
                 end
                 print(table.concat(toprint,''));
