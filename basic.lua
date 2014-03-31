@@ -45,6 +45,28 @@ local syntaxes = {};
 LINE_NUMBER = 0;
 ACTIVE_LINE = nil;
 
+-- Just to allow the system to be debugged with lua -i
+function dump_variables()
+    for var, value in pairs(variables) do
+        if (value) then
+            print(var .. ":", value)
+        else
+            print(var .. ":");
+            local mdim = arrays[var].dimy;
+            for keyx, valuex in ipairs(arrays[var]) do
+                if (mdim) then
+                    print('', keyx .. ':');
+                    for keyy, valuey in ipairs(valuex) do
+                        print('','', keyy .. ':', valuey);
+                    end
+                else
+                    print('', keyx .. ':', valuex);
+                end
+            end
+        end
+    end
+end
+
 --[[
 
         Definition patterns
@@ -598,6 +620,8 @@ do -- Lines
                 math.randomseed(os.time() * os.clock() / rnd);
             end
         end;
+        -- Yebugger
+        ["DEBUGGER"] = function() return dump_variables; end;
         -- End of main program
         ["END"] = function()
             return function()
@@ -1220,6 +1244,8 @@ repeat
     ACTIVE_LINE = activeline;
     LINE_NUMBER = activeline.num;
 
+    -- io.write(LINE_NUMBER .. ',');
+
     y,e = pcall(activeline.func);
     if (not y) then
         error("Error on line " .. LINE_NUMBER .. ": " .. e, 0);
@@ -1251,25 +1277,3 @@ repeat
     end
 until activeline == nil;
 print("Program ended on line " .. LINE_NUMBER);
-
--- Just to allow the system to be debugged with lua -i
-function dump_variables()
-    for var, value in pairs(variables) do
-        if (value) then
-            print(var .. ":", value)
-        else
-            print(var .. ":");
-            local mdim = arrays[var].dimy;
-            for keyx, valuex in ipairs(arrays[var]) do
-                if (mdim) then
-                    print('', keyx .. ':');
-                    for keyy, valuey in ipairs(valuex) do
-                        print('','', keyy .. ':', valuey);
-                    end
-                else
-                    print('', keyx .. ':', valuex);
-                end
-            end
-        end
-    end
-end
