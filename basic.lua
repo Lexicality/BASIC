@@ -8,7 +8,7 @@
 --]]
 
 --SHUT_UP = true;
-INFINITE_LOOP_PROTECTION = true;
+-- INFINITE_LOOP_PROTECTION = true;
 
 -- casual stack based shenanigans
 local push = table.insert;
