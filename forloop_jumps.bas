@@ -1,0 +1,27 @@
+1 PRINT "Hello Loops", I
+
+10 FOR I = 1 TO 10
+
+20 PRINT "loop", I
+30 IF I / 2 = INT(I / 2) THEN 100
+40 PRINT "odd"
+50 GOSUB 1000
+60 GOTO 200
+
+100 PRINT "even"
+150 GOSUB 2000
+
+
+200 NEXT I
+
+999 STOP
+
+1000 REM sub1
+1002 PRINT "I'm a subroutine", I
+1010 RETURN
+
+2000 REM sub2
+2001 PRINT "I'm also a subroutine", I
+2010 RETURN
+
+9999 END

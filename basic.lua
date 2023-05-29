@@ -482,7 +482,7 @@ do -- Lines
                     error("Don't know what to do with '" .. step_expr .. "'!", 0);
                 end
             end
-            -- 
+            --
             init  = expression(init);
             limit = expression(limit);
             step  = expression(step);
@@ -640,10 +640,13 @@ do -- Lines
     end
     function goto_santiycheck()
         for _, jumpdata in pairs(gotolist) do
+            local lineno = jumpdata[1];
             local target = jumpdata[2];
             for _, range in pairs(nogoto) do
                 if (target > range[1] and target <= range[2]) then
-                    error("Line " .. jumpdata[1] .. ": Cannot jump inside FOR block!", 0);
+                    if (lineno < range[1] or lineno > range[2]) then
+                        error("Line " .. jumpdata[1] .. ": Cannot jump inside FOR block!", 0);
+                    end
                 end
             end
         end
