@@ -22,7 +22,7 @@ use chumsky::text::newline;
 type VarName = String;
 type LineNo = usize;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Expr {
     Num(f64),
     VarNum(VarName),
@@ -39,7 +39,7 @@ enum Expr {
     Let { name: String, expr: Box<Expr> },
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum PrintItem {
     Literal(String),
     Expr(Expr),
@@ -47,15 +47,10 @@ enum PrintItem {
     Comma,
     Semicolon,
 }
-#[derive(Debug)]
-struct PrintLineItem {
-    item: PrintItem,
-    next: Option<Box<PrintLineItem>>,
-}
 
 #[derive(Debug)]
 enum Statement {
-    Print(PrintLineItem),
+    Print(Vec<PrintItem>),
     Comment,
     End,
 }
@@ -139,51 +134,33 @@ fn parser() -> impl Parser<char, Block, Error = Simple<char>> {
 
     let statement = choice((
         {
-            let print_sepr = one_of::<_, _, Simple<char>>(",;").map(|c| match c {
-                ';' => PrintItem::Semicolon,
-                ',' => PrintItem::Comma,
-                _ => panic!("wat"),
-            });
+            let print_sepr = choice((
+                just(',').to(PrintItem::Comma),
+                just(';').to(PrintItem::Semicolon),
+            ));
+
             let print_literal = quoted_string.map(PrintItem::Literal);
             let print_expr = numeric_expr.map(PrintItem::Expr);
+            let print_item = choice((print_literal, print_expr));
 
-            let print_item =
-                recursive(|print_item| {
-                    let expr = choice((print_literal, print_expr));
-
-                    choice((
-                        expr.clone()
-                            .then_ignore(space)
-                            .then(print_sepr.clone())
-                            .then_ignore(space)
-                            .then(print_item.clone())
-                            .map(|((expr, sepr), next)| PrintLineItem {
-                                item: expr,
-                                next: Some(Box::new(PrintLineItem {
-                                    item: sepr,
-                                    next: Some(Box::new(next)),
-                                })),
-                            }),
-                        print_sepr.clone().then_ignore(space).then(print_item).map(
-                            |(sepr, next)| PrintLineItem {
-                                item: sepr,
-                                next: Some(Box::new(next)),
-                            },
-                        ),
-                        expr.map(|expr| PrintLineItem {
-                            item: expr,
-                            next: None,
-                        }),
-                        print_sepr.map(|sepr| PrintLineItem {
-                            item: sepr,
-                            next: None,
-                        }),
-                    ))
-                });
+            let print_list = empty()
+                .ignore_then(
+                    print_item
+                        .clone()
+                        .or_not()
+                        .then_ignore(space)
+                        .then(print_sepr)
+                        .then_ignore(space)
+                        .map(|(a, b)| vec![a, Some(b)]),
+                )
+                .repeated()
+                .flatten()
+                .chain::<Option<PrintItem>, _, _>(print_item.or_not())
+                .flatten();
 
             text::keyword("PRINT")
                 .ignore_then(a_space)
-                .ignore_then(print_item)
+                .ignore_then(print_list)
                 .map(|printstr| {
                     println!("woo  {printstr:?}");
                     Statement::Print(printstr)

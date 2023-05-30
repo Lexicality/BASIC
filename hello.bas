@@ -1,5 +1,6 @@
 01 REM hewwo
-10 PRINT "Hello"; "world"
+10 PRINT "Hello, "; "world"; "!"
+20 PRINT ;
 201 PRINT 1
 202 PRINT 2.
 203 PRINT 3.1

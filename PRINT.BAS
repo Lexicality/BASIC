@@ -12,7 +12,7 @@
 0001 REM See the License for the specific language governing permissions and
 0001 REM limitations under the License.
 
-10 PRINT "Hello, "; "Wor";;;"";;;;;"ld!"
+15 PRINT "Hello, "; "Wor";;;"";;;;;"ld!"
 20 PRINT "Hello,", "World!"
 30 PRINT 1, 1.5,, 12.345
 40 FOR I = 1 TO 10
