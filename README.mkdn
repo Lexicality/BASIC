@@ -2,7 +2,7 @@ Lexical BASIC
 =============
 
 This is a work-in-progress implementation of ECMA-55 Minimal BASIC written entirely in Lua.  
-It is freely available under the MIT License, which can be found in the LICENSE file.
+It is available under the Apache License Version 2.0, which can be found in the LICENSE file.
 
 Required to entirely conform to ECMA-55:
 - `READ` statement
