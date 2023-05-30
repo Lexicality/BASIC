@@ -55,6 +55,7 @@ struct PrintLineItem {
 #[derive(Debug)]
 enum Statement {
     Print(PrintLineItem),
+    Comment,
     End,
 }
 
@@ -142,6 +143,11 @@ fn parser() -> impl Parser<char, Block, Error = Simple<char>> {
                     Statement::Print(printstr)
                 })
         },
+        text::keyword("REM")
+            .ignore_then(space)
+            .ignore_then(filter(|c| *c != '\n' && *c != '\r').repeated())
+            .ignored()
+            .map(|()| Statement::Comment),
         // TODO more
     ))
     .then_ignore(space)

@@ -1,2 +1,3 @@
-1 PRINT "Hello"; "world"
-2 END
+01 REM hewwo
+10 PRINT "Hello"; "world"
+20 END
