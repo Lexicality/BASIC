@@ -1,14 +1,14 @@
-Lexical BASIC
-=============
+# Lexical BASIC
 
 This is a work-in-progress implementation of ECMA-55 Minimal BASIC written entirely in Lua.  
 It is available under the Apache License Version 2.0, which can be found in the LICENSE file.
 
 Required to entirely conform to ECMA-55:
-- `READ` statement
-- `RESTORE` statement
-- `DATA` statement
-- `TAB` function
-- `PRINT` needs to use `stdout:write()` and format numbers correctly (+ newline handling)
-- Strings must be limited to 18 characters
-- User defined functions must not be allowed to return strings
+
+-   `READ` statement
+-   `RESTORE` statement
+-   `DATA` statement
+-   `TAB` function
+-   `PRINT` needs to use `stdout:write()` and format numbers correctly (+ newline handling)
+-   Strings must be limited to 18 characters
+-   User defined functions must not be allowed to return strings
