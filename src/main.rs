@@ -23,34 +23,46 @@ type VarName = String;
 type LineNo = usize;
 
 #[derive(Debug, Clone)]
-enum Expr {
+struct StringVariable(VarName);
+
+#[derive(Debug, Clone)]
+enum NumericVariable {
+    Simple(VarName),
+    Array(VarName, Box<NumExpr>, Option<Box<NumExpr>>),
+}
+
+#[derive(Debug, Clone)]
+enum NumExpr {
     Num(f64),
-    VarNum(VarName),
-    VarStr(VarName),
-    VarArr(VarName, Box<Expr>, Option<Box<Expr>>),
+    Variable(NumericVariable),
 
-    Neg(Box<Expr>),
-    Add(Box<Expr>, Box<Expr>),
-    Sub(Box<Expr>, Box<Expr>),
-    Mul(Box<Expr>, Box<Expr>),
-    Div(Box<Expr>, Box<Expr>),
+    Neg(Box<NumExpr>),
+    Add(Box<NumExpr>, Box<NumExpr>),
+    Sub(Box<NumExpr>, Box<NumExpr>),
+    Mul(Box<NumExpr>, Box<NumExpr>),
+    Div(Box<NumExpr>, Box<NumExpr>),
 
-    Call(String, Vec<Expr>),
-    Let { name: String, expr: Box<Expr> },
+    Call(String, Vec<NumExpr>),
 }
 
 #[derive(Debug, Clone)]
 enum PrintItem {
     Literal(String),
-    Expr(Expr),
+    Expr(NumExpr),
     Tab(u8),
     Comma,
     Semicolon,
 }
 
 #[derive(Debug, Clone)]
+enum LetStatement {
+    Numeric(NumericVariable, NumExpr),
+}
+
+#[derive(Debug, Clone)]
 enum Statement {
     Print(Vec<PrintItem>),
+    Let(LetStatement),
     Comment,
     End,
 }
@@ -87,27 +99,28 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
         let numeric_variable = filter::<_, _, Simple<char>>(char::is_ascii_uppercase)
             .then(filter(char::is_ascii_digit).or_not())
             .map(|(var, digit)| {
-                Expr::VarNum(match digit {
+                NumExpr::Variable(NumericVariable::Simple(match digit {
                     Some(digit) => format!("{var}{digit}"),
                     None => var.to_string(),
-                })
+                }))
             });
 
         let array_variable = filter::<_, _, Simple<char>>(char::is_ascii_uppercase)
             .then(
                 numeric_expr
+                    .padded()
                     .separated_by(just(','))
                     .at_least(1)
                     .at_most(2)
                     .delimited_by(just('('), just(')'))
-                    .collect::<Vec<Expr>>(),
+                    .collect::<Vec<NumExpr>>(),
             )
             .map(|(name, args)| {
-                Expr::VarArr(
+                NumExpr::Variable(NumericVariable::Array(
                     dbg!(name).to_string(),
                     Box::new(args[0].clone()),
                     args.get(1).map(|expr| Box::new(expr.clone())),
-                )
+                ))
             });
 
         let sign = one_of("+-");
@@ -144,7 +157,7 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
                     if let Some(exp) = exponent {
                         val *= 10f64.powi(exp)
                     }
-                    Expr::Num(val)
+                    NumExpr::Num(val)
                 },
             );
 
@@ -164,7 +177,7 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
             ));
 
             let print_literal = quoted_string.map(PrintItem::Literal);
-            let print_expr = numeric_expr.map(|aa| {
+            let print_expr = numeric_expr.clone().map(|aa| {
                 PrintItem::Expr(aa)
                 //
             });
@@ -198,6 +211,18 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
             .ignore_then(filter(|c| *c != '\n' && *c != '\r').repeated())
             .ignored()
             .map(|()| Statement::Comment),
+        text::keyword("LET")
+            .ignore_then(a_space)
+            .ignore_then(numeric_expr.clone())
+            .map(|a| match a {
+                NumExpr::Variable(v) => v,
+                _ => panic!("bad"),
+            })
+            .then_ignore(a_space)
+            .then_ignore(just('='))
+            .then_ignore(a_space)
+            .then(numeric_expr)
+            .map(|(var, expr)| Statement::Let(LetStatement::Numeric(var, expr))),
         // TODO more
     ))
     .then_ignore(space)
@@ -216,6 +241,7 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
     block
         .repeated()
         .at_least(1)
+        .map(|a| dbg!(a))
         .chain(
             lineno
                 .then_ignore(text::keyword("END"))
