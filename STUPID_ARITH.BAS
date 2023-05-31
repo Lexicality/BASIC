@@ -12,12 +12,12 @@
 0001 REM See the License for the specific language governing permissions and
 0001 REM limitations under the License.
 
-10 DIM A1 (120)
-19 REM A1(2) == 12
-20 LET A1(2) = 5 + 7
-29 REM A1(3) == 108
-30 LET A1(1 + 2) = A1(2) * 9
-39 REM A1(120) = 12 * 108 = 1296
-40 LET A1(A1(2) + A1(3)) = A1(1 * 2) * A1(1 + 1 + 1)
-50 PRINT A1(120)
+10 DIM A (120)
+19 REM A(2) == 12
+20 LET A(2) = 5 + 7
+29 REM A(3) == 108
+30 LET A(1 + 2) = A(2) * 9
+39 REM A(120) = 12 * 108 = 1296
+40 LET A(A(2) + A(3)) = A(1 * 2) * A(1 + 1 + 1)
+50 PRINT A(120)
 60 END
