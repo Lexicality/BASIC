@@ -40,10 +40,13 @@ enum NumExpr {
     Sub(Box<NumExpr>, Box<NumExpr>),
     Mul(Box<NumExpr>, Box<NumExpr>),
     Div(Box<NumExpr>, Box<NumExpr>),
+    Pow(Box<NumExpr>, Box<NumExpr>),
 
     Call(String),
     CallArgs(String, Box<NumExpr>),
 }
+
+type BinaryNumExpr = fn(Box<NumExpr>, Box<NumExpr>) -> NumExpr;
 
 #[derive(Debug, Clone)]
 enum PrintItem {
@@ -164,6 +167,8 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
                 },
             );
 
+        let group = numeric_expr.padded().delimited_by(just('('), just(')'));
+
         let arg_fns = choice((
             just("ABS"),
             just("ATN"),
@@ -186,19 +191,59 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
 
         let arg_fn = arg_fns
             .or(user_fn)
-            .then(numeric_expr.delimited_by(just('('), just(')')))
+            // Cheeky, a function call is basically just a grouped expression
+            .then(group.clone())
             .map(|(var, arg)| NumExpr::CallArgs(var, Box::new(arg)));
 
         let narg_fn = rnd_fn.or(user_fn).map(NumExpr::Call);
 
-        choice((
+        let primary = choice((
             arg_fn,
             narg_fn,
             array_variable,
             numeric_variable,
             number,
-            //
-        ))
+            group,
+        ));
+
+        let op = |c, v: BinaryNumExpr| space.ignore_then(just(c)).then_ignore(space).to(v);
+
+        fn bin<I, E, InP, OutP>(
+            input: InP,
+            opers: OutP,
+        ) -> impl Parser<I, NumExpr, Error = E> + Clone
+        where
+            I: Clone,
+            E: chumsky::Error<I>,
+            InP: Parser<I, NumExpr, Error = E> + Clone,
+            OutP: Parser<I, BinaryNumExpr, Error = E> + Clone,
+        {
+            input
+                .clone()
+                .then(opers.then(input).repeated())
+                .foldl(|lhs, (op, rhs)| op(Box::new(lhs), Box::new(rhs)))
+        }
+
+        // I've used names from the spec even though they're silly
+        let factor = bin(primary, op('^', NumExpr::Pow));
+        let term = bin(
+            factor,
+            choice((op('*', NumExpr::Mul), op('/', NumExpr::Div))),
+        );
+
+        // this is a trainwreck of a parse statement
+
+        let unary = choice((just('+'), just('-'), empty().to('#')))
+            .then(term.clone())
+            .map(|(op, term)| match op {
+                '-' => NumExpr::Neg(Box::new(term)),
+                _ => term,
+            });
+        let opers = choice((op('+', NumExpr::Add), op('-', NumExpr::Sub)));
+        unary
+            .clone()
+            .then(opers.then(term).repeated())
+            .foldl(|lhs, (op, rhs)| op(Box::new(lhs), Box::new(rhs)))
     });
 
     let statement = choice((
