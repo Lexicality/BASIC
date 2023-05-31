@@ -78,13 +78,13 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
         .ignore_then(text::int(10))
         .map(|raw| raw.parse::<LineNo>().unwrap());
 
-    let quoted_string = filter::<_, _, Simple<char>>(|c| *c != '\n' && *c != '"')
+    let quoted_string = filter(|c| *c != '\n' && *c != '"')
         .repeated()
         .collect::<String>()
         .delimited_by(just('"'), just('"'));
 
     let numeric_expr = recursive(|numeric_expr| {
-        let sign = one_of::<_, _, Simple<char>>("+-");
+        let sign = one_of("+-");
         let int = text::int(10);
 
         let fraction = just('.').ignore_then(int);
