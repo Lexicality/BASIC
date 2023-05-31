@@ -42,7 +42,8 @@ enum NumExpr {
     Mul(Box<NumExpr>, Box<NumExpr>),
     Div(Box<NumExpr>, Box<NumExpr>),
 
-    Call(String, Vec<NumExpr>),
+    Call(String),
+    CallArgs(String, Box<NumExpr>),
 }
 
 #[derive(Debug, Clone)]
@@ -108,6 +109,7 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
         let array_variable = filter::<_, _, Simple<char>>(char::is_ascii_uppercase)
             .then(
                 numeric_expr
+                    .clone()
                     .padded()
                     .separated_by(just(','))
                     .at_least(1)
@@ -161,7 +163,36 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
                 },
             );
 
+        let arg_fns = choice((
+            just("ABS"),
+            just("ATN"),
+            just("COS"),
+            just("EXP"),
+            just("INT"),
+            just("LOG"),
+            just("SGN"),
+            just("SIN"),
+            just("SQR"),
+            just("TAN"),
+        ))
+        .map(str::to_owned);
+
+        let rnd_fn = just("RND").map(str::to_owned);
+
+        let user_fn = just("FN")
+            .then(filter(char::is_ascii_uppercase))
+            .map(|(a, b)| format!("{a}{b}"));
+
+        let arg_fn = arg_fns
+            .or(user_fn)
+            .then(numeric_expr.delimited_by(just('('), just(')')))
+            .map(|(var, arg)| NumExpr::CallArgs(var, Box::new(arg)));
+
+        let narg_fn = rnd_fn.or(user_fn).map(NumExpr::Call);
+
         choice((
+            arg_fn,
+            narg_fn,
             array_variable,
             numeric_variable,
             number,
