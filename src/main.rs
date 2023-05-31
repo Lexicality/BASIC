@@ -48,35 +48,29 @@ enum PrintItem {
     Semicolon,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Statement {
     Print(Vec<PrintItem>),
     Comment,
     End,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 enum Block {
     For {
-        line_no: LineNo,
-        next: Box<Block>,
-        inner: Box<Block>,
         var: VarName,
         start: f64,
         end: f64,
         step: f64,
+        inner: Box<Block>,
     },
-    Line {
-        line_no: LineNo,
-        next: Box<Block>,
-        stmt: Statement,
-    },
-    End {
-        line_no: LineNo,
-    },
+    Line(Statement),
+    End,
 }
 
-fn parser() -> impl Parser<char, Block, Error = Simple<char>> {
+type ProgramEntry = (LineNo, Block);
+
+fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
     let space = just(' ').repeated();
     let a_space = space.at_least(1);
     let lineno = just('0')
@@ -116,7 +110,6 @@ fn parser() -> impl Parser<char, Block, Error = Simple<char>> {
             .then(exponent.or_not())
             .map(
                 |((sign, mut val), exponent): ((Option<char>, f64), Option<i32>)| {
-                    println!("Ayy lmao {:?} {:?} {:?}", sign, val, exponent);
                     if let Some(sign) = sign {
                         if sign == '-' {
                             val *= -1.0;
@@ -161,10 +154,7 @@ fn parser() -> impl Parser<char, Block, Error = Simple<char>> {
             text::keyword("PRINT")
                 .ignore_then(a_space)
                 .ignore_then(print_list)
-                .map(|printstr| {
-                    println!("woo  {printstr:?}");
-                    Statement::Print(printstr)
-                })
+                .map(Statement::Print)
         },
         text::keyword("REM")
             .ignore_then(space)
@@ -176,28 +166,27 @@ fn parser() -> impl Parser<char, Block, Error = Simple<char>> {
     .then_ignore(space)
     .then_ignore(newline());
 
-    let block = recursive(|block| {
-        let lineno = lineno.then_ignore(a_space);
-        let end_line = lineno
-            .then_ignore(text::keyword("END"))
-            .then_ignore(space)
-            .then_ignore(text::newline())
-            .then_ignore(end())
-            .map(|line_no| Block::End { line_no });
+    // At this point we've handled everything that can specify line numbers so
+    // everything remaining is lines
+    let lineno = lineno.then_ignore(a_space);
 
-        let line = lineno
-            .then(statement)
-            .then(block)
-            .map(|((line_no, stmt), next)| Block::Line {
-                line_no,
-                stmt,
-                next: Box::new(next),
-            });
-
-        choice((line, end_line))
-    });
+    let block = {
+        let line = statement.map(Block::Line);
+        // TODO: for loop goes here
+        lineno.then(choice((line,)))
+    };
 
     block
+        .repeated()
+        .at_least(1)
+        .chain(
+            lineno
+                .then_ignore(text::keyword("END"))
+                .then_ignore(space)
+                .then_ignore(text::newline())
+                .map(|line_no| (line_no, Block::End)),
+        )
+        .then_ignore(end())
 }
 
 fn main() {
