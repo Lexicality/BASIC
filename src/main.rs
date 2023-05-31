@@ -27,7 +27,7 @@ enum Expr {
     Num(f64),
     VarNum(VarName),
     VarStr(VarName),
-    VarArr(VarName, usize),
+    VarArr(VarName, Box<Expr>, Option<Box<Expr>>),
 
     Neg(Box<Expr>),
     Add(Box<Expr>, Box<Expr>),
@@ -84,6 +84,32 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
         .delimited_by(just('"'), just('"'));
 
     let numeric_expr = recursive(|numeric_expr| {
+        let numeric_variable = filter::<_, _, Simple<char>>(char::is_ascii_uppercase)
+            .then(filter(char::is_ascii_digit).or_not())
+            .map(|(var, digit)| {
+                Expr::VarNum(match digit {
+                    Some(digit) => format!("{var}{digit}"),
+                    None => var.to_string(),
+                })
+            });
+
+        let array_variable = filter::<_, _, Simple<char>>(char::is_ascii_uppercase)
+            .then(
+                numeric_expr
+                    .separated_by(just(','))
+                    .at_least(1)
+                    .at_most(2)
+                    .delimited_by(just('('), just(')'))
+                    .collect::<Vec<Expr>>(),
+            )
+            .map(|(name, args)| {
+                Expr::VarArr(
+                    dbg!(name).to_string(),
+                    Box::new(args[0].clone()),
+                    args.get(1).map(|expr| Box::new(expr.clone())),
+                )
+            });
+
         let sign = one_of("+-");
         let int = text::int(10);
 
@@ -122,7 +148,12 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
                 },
             );
 
-        number
+        choice((
+            array_variable,
+            numeric_variable,
+            number,
+            //
+        ))
     });
 
     let statement = choice((
@@ -133,7 +164,10 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
             ));
 
             let print_literal = quoted_string.map(PrintItem::Literal);
-            let print_expr = numeric_expr.map(PrintItem::Expr);
+            let print_expr = numeric_expr.map(|aa| {
+                PrintItem::Expr(aa)
+                //
+            });
             let print_item = choice((print_literal, print_expr));
 
             let print_list = empty()
