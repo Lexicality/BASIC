@@ -17,7 +17,6 @@
 
 use chumsky::prelude::*;
 use chumsky::text;
-use chumsky::text::newline;
 
 type VarName = String;
 type LineNo = usize;
@@ -78,6 +77,7 @@ enum Block {
         inner: Box<Block>,
     },
     Line(Statement),
+    NoOp,
     End,
 }
 
@@ -86,10 +86,11 @@ type ProgramEntry = (LineNo, Block);
 fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
     let space = just(' ').repeated();
     let a_space = space.at_least(1);
-    let lineno = just('0')
-        .repeated()
-        .ignore_then(text::int(10))
-        .map(|raw| raw.parse::<LineNo>().unwrap());
+    let lineno = just('0').repeated().ignore_then(text::int(10)).map(|raw| {
+        let ret = raw.parse::<LineNo>().unwrap();
+        assert!(ret > 0, "Line numbers must be positive");
+        ret
+    });
 
     let quoted_string = filter(|c| *c != '\n' && *c != '"')
         .repeated()
@@ -257,16 +258,19 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
         // TODO more
     ))
     .then_ignore(space)
-    .then_ignore(newline());
-
-    // At this point we've handled everything that can specify line numbers so
-    // everything remaining is lines
-    let lineno = lineno.then_ignore(a_space);
+    .then_ignore(text::newline());
 
     let block = {
         let line = statement.map(Block::Line);
         // TODO: for loop goes here
-        lineno.then(choice((line,)))
+        choice((
+            lineno.then_ignore(a_space).then(choice((line,))),
+            lineno
+                .or_not()
+                .then_ignore(space)
+                .then_ignore(text::newline())
+                .map(|line_no| (line_no.unwrap_or(0), Block::NoOp)),
+        ))
     };
 
     block
@@ -275,6 +279,7 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
         .map(|a| dbg!(a))
         .chain(
             lineno
+                .then_ignore(a_space)
                 .then_ignore(text::keyword("END"))
                 .then_ignore(space)
                 .then_ignore(text::newline())
