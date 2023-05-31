@@ -156,6 +156,9 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
                 .ignore_then(print_list)
                 .map(Statement::Print)
         },
+        text::keyword("PRINT")
+            .ignore_then(space)
+            .to(Statement::Print(vec![])),
         text::keyword("REM")
             .ignore_then(space)
             .ignore_then(filter(|c| *c != '\n' && *c != '\r').repeated())
