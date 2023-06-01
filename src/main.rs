@@ -49,16 +49,23 @@ enum NumExpr {
 type BinaryNumExpr = fn(Box<NumExpr>, Box<NumExpr>) -> NumExpr;
 
 #[derive(Debug, Clone)]
-enum PrintItem {
+enum StringExpr {
     Literal(String),
-    Expr(NumExpr),
-    Tab(u8),
+    Variable(StringVariable),
+}
+
+#[derive(Debug, Clone)]
+enum PrintItem {
+    String(StringExpr),
+    Num(NumExpr),
+    Tab(NumExpr),
     Comma,
     Semicolon,
 }
 
 #[derive(Debug, Clone)]
 enum LetStatement {
+    String(StringVariable, StringExpr),
     Numeric(NumericVariable, NumExpr),
 }
 
@@ -99,6 +106,15 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
         .repeated()
         .collect::<String>()
         .delimited_by(just('"'), just('"'));
+
+    let string_variable = filter::<_, _, Simple<char>>(char::is_ascii_uppercase)
+        .then_ignore(just('$'))
+        .map(|letter| StringVariable(letter.to_string()));
+
+    let string_expr = choice((
+        quoted_string.map(StringExpr::Literal),
+        string_variable.map(StringExpr::Variable),
+    ));
 
     let numeric_expr = recursive(|numeric_expr| {
         let numeric_variable = filter::<_, _, Simple<char>>(char::is_ascii_uppercase)
@@ -253,12 +269,17 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
                 just(';').to(PrintItem::Semicolon),
             ));
 
-            let print_literal = quoted_string.map(PrintItem::Literal);
-            let print_expr = numeric_expr.clone().map(|aa| {
-                PrintItem::Expr(aa)
-                //
-            });
-            let print_item = choice((print_literal, print_expr));
+            let string = string_expr.map(PrintItem::String);
+            let number = numeric_expr.clone().map(PrintItem::Num);
+            let tab_call = just("TAB")
+                .ignore_then(
+                    numeric_expr
+                        .clone()
+                        .padded()
+                        .delimited_by(just('('), just(')')),
+                )
+                .map(PrintItem::Tab);
+            let print_item = choice((tab_call, string, number));
 
             let print_list = empty()
                 .ignore_then(
@@ -290,10 +311,18 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
             .map(|()| Statement::Comment),
         text::keyword("LET")
             .ignore_then(a_space)
+            .ignore_then(string_variable)
+            .then_ignore(a_space)
+            .then_ignore(just('='))
+            .then_ignore(a_space)
+            .then(string_expr)
+            .map(|(var, expr)| Statement::Let(LetStatement::String(var, expr))),
+        text::keyword("LET")
+            .ignore_then(a_space)
             .ignore_then(numeric_expr.clone())
             .map(|a| match a {
                 NumExpr::Variable(v) => v,
-                _ => panic!("bad"),
+                _ => panic!("Cannot assign to a non-variable value"),
             })
             .then_ignore(a_space)
             .then_ignore(just('='))
