@@ -121,21 +121,12 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
         ret
     });
 
-    let plain_string_character = filter::<char, _, Simple<char>>(|c| {
-        c.is_ascii_alphanumeric() || *c == '+' || *c == '-' || *c == '.'
-    });
-
-    let unquoted_string = choice::<_, Simple<char>>((
-        plain_string_character
-            .then(
-                // choice((just(' '), plain_string_character))
-                plain_string_character.repeated().collect::<String>(),
-            )
-            .then(plain_string_character)
-            .map(|((start, middle), end)| format!("{start}{middle}{end}")),
-        plain_string_character.map(|c| c.to_string()),
-        // plain_string_character.repeated().at_least(1).collect(),
-    ));
+    let unquoted_string = filter::<char, _, Simple<char>>(|c| {
+        c.is_ascii_alphanumeric() || *c == '+' || *c == '-' || *c == '.' || *c == ' '
+    })
+    .repeated()
+    .collect::<String>()
+    .map(|s| s.trim().to_owned());
 
     let quoted_string = filter(|c| *c != '\n' && *c != '"')
         .repeated()
