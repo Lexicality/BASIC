@@ -400,26 +400,18 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
                 .to(Statement::Read as fn(_) -> _)
                 .or(text::keyword("INPUT").to(Statement::Input as fn(_) -> _))
                 .then_ignore(a_space)
-                .then(
-                    space
-                        .ignore_then(variable)
-                        .then_ignore(space)
-                        .separated_by(just(','))
-                        .at_least(1),
-                )
+                .then(variable.separated_by(just(',').padded()).at_least(1))
                 .map(|(statement, vars)| statement(vars))
         },
         text::keyword("DATA")
             .ignore_then(a_space)
             .ignore_then(
-                space
-                    .ignore_then(choice((
-                        numeric_constant.map(Datum::Number),
-                        quoted_string.map(Datum::String),
-                        unquoted_string.map(Datum::String),
-                    )))
-                    .then_ignore(space)
-                    .separated_by(just(",")),
+                choice((
+                    numeric_constant.map(Datum::Number),
+                    quoted_string.map(Datum::String),
+                    unquoted_string.map(Datum::String),
+                ))
+                .separated_by(just(",").padded()),
             )
             .map(Statement::Data),
         // TODO more
