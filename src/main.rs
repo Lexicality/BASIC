@@ -75,6 +75,10 @@ enum Statement {
     Let(LetStatement),
     Dim(Vec<(VarName, usize, Option<usize>)>),
     Comment,
+    Randomize,
+    Restore,
+    Return,
+    Stop,
     End,
 }
 
@@ -319,9 +323,11 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
                 .ignore_then(print_list)
                 .map(Statement::Print)
         },
-        text::keyword("PRINT")
-            .ignore_then(space)
-            .to(Statement::Print(vec![])),
+        text::keyword("PRINT").to(Statement::Print(vec![])),
+        text::keyword("RANDOMIZE").to(Statement::Randomize),
+        text::keyword("RESTORE").to(Statement::Restore),
+        text::keyword("RETURN").to(Statement::Return),
+        text::keyword("STOP").to(Statement::Stop),
         text::keyword("REM")
             .ignore_then(space)
             .ignore_then(filter(|c| *c != '\n' && *c != '\r').repeated())
@@ -382,9 +388,9 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
     };
 
     block
+        .map(|block| dbg!(block))
         .repeated()
         .at_least(1)
-        .map(|a| dbg!(a))
         .chain(
             lineno
                 .then_ignore(a_space)
