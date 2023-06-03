@@ -60,6 +60,12 @@ enum StringExpr {
 }
 
 #[derive(Debug, Clone)]
+enum Datum {
+    Number(f64),
+    String(String),
+}
+
+#[derive(Debug, Clone)]
 enum PrintItem {
     String(StringExpr),
     Num(NumExpr),
@@ -80,6 +86,7 @@ enum Statement {
     Let(LetStatement),
     Dim(Vec<(VarName, usize, Option<usize>)>),
     Read(Vec<Variable>),
+    Data(Vec<Datum>),
     Input(Vec<Variable>),
     Comment,
     Randomize,
@@ -114,6 +121,22 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
         ret
     });
 
+    let plain_string_character = filter::<char, _, Simple<char>>(|c| {
+        c.is_ascii_alphanumeric() || *c == '+' || *c == '-' || *c == '.'
+    });
+
+    let unquoted_string = choice::<_, Simple<char>>((
+        plain_string_character
+            .then(
+                // choice((just(' '), plain_string_character))
+                plain_string_character.repeated().collect::<String>(),
+            )
+            .then(plain_string_character)
+            .map(|((start, middle), end)| format!("{start}{middle}{end}")),
+        plain_string_character.map(|c| c.to_string()),
+        // plain_string_character.repeated().at_least(1).collect(),
+    ));
+
     let quoted_string = filter(|c| *c != '\n' && *c != '"')
         .repeated()
         .collect::<String>()
@@ -127,6 +150,45 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
         quoted_string.map(StringExpr::Literal),
         string_variable.map(StringExpr::Variable),
     ));
+
+    let numeric_constant = {
+        let sign = one_of("+-");
+        let int = text::int(10);
+
+        let fraction = just('.').ignore_then(int);
+        let exponent = just('E')
+            .ignore_then(sign.clone().or_not())
+            .then(int)
+            .map(|(sign, int)| {
+                format!("{}{int}", sign.unwrap_or('+'))
+                    .parse::<i32>()
+                    .unwrap()
+            });
+
+        sign.or_not()
+            .then(choice((
+                int.then(fraction)
+                    .map(|(int, frac)| format!("{int}.{frac}").parse::<f64>().unwrap()),
+                int.then_ignore(just('.'))
+                    .map(|int| int.parse::<f64>().unwrap()),
+                int.map(|int| int.parse::<f64>().unwrap()),
+                fraction.map(|frac| format!("0.{frac}").parse::<f64>().unwrap()),
+            )))
+            .then(exponent.or_not())
+            .map(
+                |((sign, mut val), exponent): ((Option<char>, f64), Option<i32>)| {
+                    if let Some(sign) = sign {
+                        if sign == '-' {
+                            val *= -1.0;
+                        }
+                    }
+                    if let Some(exp) = exponent {
+                        val *= 10f64.powi(exp)
+                    }
+                    val
+                },
+            )
+    };
 
     fn numeric_variable<E, P>(
         numeric_expr: P,
@@ -170,44 +232,6 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
     let numeric_expr = recursive(|numeric_expr| {
         let numeric_variable = numeric_variable(numeric_expr.clone()).map(NumExpr::Variable);
 
-        let sign = one_of("+-");
-        let int = text::int(10);
-
-        let fraction = just('.').ignore_then(int);
-        let exponent = just('E')
-            .ignore_then(sign.clone().or_not())
-            .then(int)
-            .map(|(sign, int)| {
-                format!("{}{int}", sign.unwrap_or('+'))
-                    .parse::<i32>()
-                    .unwrap()
-            });
-
-        let number = sign
-            .or_not()
-            .then(choice((
-                int.then(fraction)
-                    .map(|(int, frac)| format!("{int}.{frac}").parse::<f64>().unwrap()),
-                int.then_ignore(just('.'))
-                    .map(|int| int.parse::<f64>().unwrap()),
-                int.map(|int| int.parse::<f64>().unwrap()),
-                fraction.map(|frac| format!("0.{frac}").parse::<f64>().unwrap()),
-            )))
-            .then(exponent.or_not())
-            .map(
-                |((sign, mut val), exponent): ((Option<char>, f64), Option<i32>)| {
-                    if let Some(sign) = sign {
-                        if sign == '-' {
-                            val *= -1.0;
-                        }
-                    }
-                    if let Some(exp) = exponent {
-                        val *= 10f64.powi(exp)
-                    }
-                    NumExpr::Num(val)
-                },
-            );
-
         let group = numeric_expr.padded().delimited_by(just('('), just(')'));
 
         let arg_fns = choice((
@@ -242,7 +266,7 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
             arg_fn,
             narg_fn,
             numeric_variable,
-            number,
+            numeric_constant.clone().map(NumExpr::Num),
             group,
             //
         ));
@@ -394,6 +418,19 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
                 )
                 .map(|(statement, vars)| statement(vars))
         },
+        text::keyword("DATA")
+            .ignore_then(a_space)
+            .ignore_then(
+                space
+                    .ignore_then(choice((
+                        numeric_constant.map(Datum::Number),
+                        quoted_string.map(Datum::String),
+                        unquoted_string.map(Datum::String),
+                    )))
+                    .then_ignore(space)
+                    .separated_by(just(",")),
+            )
+            .map(Statement::Data),
         // TODO more
     ))
     .then_ignore(space)
