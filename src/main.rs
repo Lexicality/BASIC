@@ -116,20 +116,27 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
         string_variable.map(StringExpr::Variable),
     ));
 
-    let numeric_expr = recursive(|numeric_expr| {
-        let numeric_variable = filter::<_, _, Simple<char>>(char::is_ascii_uppercase)
+    fn numeric_variable<E, P>(
+        numeric_expr: P,
+    ) -> impl Parser<char, NumericVariable, Error = E> + Clone
+    where
+        E: chumsky::Error<char>,
+        P: Parser<char, NumExpr, Error = E> + Clone,
+    {
+        let letter = filter::<char, _, E>(|c| c.is_ascii_uppercase());
+
+        let simple = letter
             .then(filter(char::is_ascii_digit).or_not())
             .map(|(var, digit)| {
-                NumExpr::Variable(NumericVariable::Simple(match digit {
+                NumericVariable::Simple(match digit {
                     Some(digit) => format!("{var}{digit}"),
                     None => var.to_string(),
-                }))
+                })
             });
 
-        let array_variable = filter::<_, _, Simple<char>>(char::is_ascii_uppercase)
+        let array = letter
             .then(
                 numeric_expr
-                    .clone()
                     .padded()
                     .separated_by(just(','))
                     .at_least(1)
@@ -138,12 +145,18 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
                     .collect::<Vec<NumExpr>>(),
             )
             .map(|(name, args)| {
-                NumExpr::Variable(NumericVariable::Array(
-                    dbg!(name).to_string(),
+                NumericVariable::Array(
+                    name.to_string(),
                     Box::new(args[0].clone()),
                     args.get(1).map(|expr| Box::new(expr.clone())),
-                ))
+                )
             });
+
+        array.or(simple)
+    }
+
+    let numeric_expr = recursive(|numeric_expr| {
+        let numeric_variable = numeric_variable(numeric_expr.clone()).map(NumExpr::Variable);
 
         let sign = one_of("+-");
         let int = text::int(10);
@@ -216,10 +229,10 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
         let primary = choice((
             arg_fn,
             narg_fn,
-            array_variable,
             numeric_variable,
             number,
             group,
+            //
         ));
 
         let op = |c, v: BinaryNumExpr| space.ignore_then(just(c)).then_ignore(space).to(v);
@@ -261,6 +274,10 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
             .then(opers.then(term).repeated())
             .foldl(|lhs, (op, rhs)| op(Box::new(lhs), Box::new(rhs)))
     });
+
+    let numeric_variable = numeric_variable(numeric_expr.clone());
+
+    // let variable = choice((string_variable, numeric_variable));
 
     let statement = choice((
         {
@@ -319,11 +336,7 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
             .map(|(var, expr)| Statement::Let(LetStatement::String(var, expr))),
         text::keyword("LET")
             .ignore_then(a_space)
-            .ignore_then(numeric_expr.clone())
-            .map(|a| match a {
-                NumExpr::Variable(v) => v,
-                _ => panic!("Cannot assign to a non-variable value"),
-            })
+            .ignore_then(numeric_variable)
             .then_ignore(a_space)
             .then_ignore(just('='))
             .then_ignore(a_space)
