@@ -73,6 +73,7 @@ enum LetStatement {
 enum Statement {
     Print(Vec<PrintItem>),
     Let(LetStatement),
+    Dim(Vec<(VarName, usize, Option<usize>)>),
     Comment,
     End,
 }
@@ -342,6 +343,26 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
             .then_ignore(a_space)
             .then(numeric_expr)
             .map(|(var, expr)| Statement::Let(LetStatement::Numeric(var, expr))),
+        text::keyword("DIM")
+            .ignore_then(a_space)
+            .ignore_then(
+                filter::<char, _, Simple<char>>(|c| c.is_ascii_uppercase())
+                    .then_ignore(space)
+                    .then(
+                        text::int::<char, Simple<char>>(10)
+                            .padded()
+                            .map(|a| a.parse().unwrap())
+                            .separated_by(just(','))
+                            .at_least(1)
+                            .at_most(2)
+                            .delimited_by(just('('), just(')'))
+                            .collect::<Vec<usize>>(),
+                    )
+                    .map(|(name, args)| (name.to_string(), args[0], args.get(1).copied()))
+                    .repeated()
+                    .at_least(1),
+            )
+            .map(Statement::Dim),
         // TODO more
     ))
     .then_ignore(space)
