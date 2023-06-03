@@ -29,6 +29,11 @@ enum NumericVariable {
     Simple(VarName),
     Array(VarName, Box<NumExpr>, Option<Box<NumExpr>>),
 }
+#[derive(Debug, Clone)]
+enum Variable {
+    String(StringVariable),
+    Numeric(NumericVariable),
+}
 
 #[derive(Debug, Clone)]
 enum NumExpr {
@@ -74,6 +79,8 @@ enum Statement {
     Print(Vec<PrintItem>),
     Let(LetStatement),
     Dim(Vec<(VarName, usize, Option<usize>)>),
+    Read(Vec<Variable>),
+    Input(Vec<Variable>),
     Comment,
     Randomize,
     Restore,
@@ -282,7 +289,10 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
 
     let numeric_variable = numeric_variable(numeric_expr.clone());
 
-    // let variable = choice((string_variable, numeric_variable));
+    let variable = choice((
+        string_variable.map(Variable::String),
+        numeric_variable.clone().map(Variable::Numeric),
+    ));
 
     let statement = choice((
         {
@@ -369,6 +379,21 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
                     .at_least(1),
             )
             .map(Statement::Dim),
+        {
+            // READ and INTPUT
+            text::keyword("READ")
+                .to(Statement::Read as fn(_) -> _)
+                .or(text::keyword("INPUT").to(Statement::Input as fn(_) -> _))
+                .then_ignore(a_space)
+                .then(
+                    space
+                        .ignore_then(variable)
+                        .then_ignore(space)
+                        .separated_by(just(','))
+                        .at_least(1),
+                )
+                .map(|(statement, vars)| statement(vars))
+        },
         // TODO more
     ))
     .then_ignore(space)
