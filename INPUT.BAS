@@ -12,6 +12,6 @@
 0001 REM See the License for the specific language governing permissions and
 0001 REM limitations under the License.
 
-10 INPUT A$, B, C(1)
+10 INPUT A$ , B, C(1)
 20 PRINT A$, B, C(1)
 30 END
