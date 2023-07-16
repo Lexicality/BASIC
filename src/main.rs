@@ -19,6 +19,7 @@ use chumsky::prelude::*;
 use chumsky::text;
 
 type VarName = String;
+type FuncName = String;
 type LineNo = usize;
 
 #[derive(Debug, Clone)]
@@ -47,8 +48,8 @@ enum NumExpr {
     Div(Box<NumExpr>, Box<NumExpr>),
     Pow(Box<NumExpr>, Box<NumExpr>),
 
-    Call(String),
-    CallArgs(String, Box<NumExpr>),
+    Call(FuncName),
+    CallArgs(FuncName, Box<NumExpr>),
 }
 
 type BinaryNumExpr = fn(Box<NumExpr>, Box<NumExpr>) -> NumExpr;
@@ -82,6 +83,7 @@ enum Statement {
     Read(Vec<Variable>),
     Data(Vec<String>),
     Input(Vec<Variable>),
+    Function(FuncName, Option<NumericVariable>, NumExpr),
     Comment,
     Randomize,
     Restore,
@@ -175,25 +177,23 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
             )
     };
 
-    fn numeric_variable<E, P>(
+    let simple_numeric_variable = filter::<char, _, _>(|c| c.is_ascii_uppercase())
+        .then(filter(char::is_ascii_digit).or_not())
+        .map(|(var, digit)| {
+            NumericVariable::Simple(match digit {
+                Some(digit) => format!("{var}{digit}"),
+                None => var.to_string(),
+            })
+        });
+
+    fn numeric_array_variable<E, P>(
         numeric_expr: P,
     ) -> impl Parser<char, NumericVariable, Error = E> + Clone
     where
         E: chumsky::Error<char>,
         P: Parser<char, NumExpr, Error = E> + Clone,
     {
-        let letter = filter::<char, _, E>(|c| c.is_ascii_uppercase());
-
-        let simple = letter
-            .then(filter(char::is_ascii_digit).or_not())
-            .map(|(var, digit)| {
-                NumericVariable::Simple(match digit {
-                    Some(digit) => format!("{var}{digit}"),
-                    None => var.to_string(),
-                })
-            });
-
-        let array = letter
+        filter::<char, _, _>(|c| c.is_ascii_uppercase())
             .then(
                 numeric_expr
                     .padded()
@@ -209,13 +209,14 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
                     Box::new(args[0].clone()),
                     args.get(1).map(|expr| Box::new(expr.clone())),
                 )
-            });
-
-        array.or(simple)
+            })
     }
+    // let numeric_variable =
 
     let numeric_expr = recursive(|numeric_expr| {
-        let numeric_variable = numeric_variable(numeric_expr.clone()).map(NumExpr::Variable);
+        let numeric_variable = numeric_array_variable(numeric_expr.clone())
+            .or(simple_numeric_variable)
+            .map(NumExpr::Variable);
 
         let group = numeric_expr.padded().delimited_by(just('('), just(')'));
 
@@ -296,7 +297,7 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
             .foldl(|lhs, (op, rhs)| op(Box::new(lhs), Box::new(rhs)))
     });
 
-    let numeric_variable = numeric_variable(numeric_expr.clone());
+    let numeric_variable = numeric_array_variable(numeric_expr.clone()).or(simple_numeric_variable);
 
     let variable = choice((
         string_variable.map(Variable::String),
@@ -366,7 +367,7 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
             .then_ignore(a_space)
             .then_ignore(just('='))
             .then_ignore(a_space)
-            .then(numeric_expr)
+            .then(numeric_expr.clone())
             .map(|(var, expr)| Statement::Let(LetStatement::Numeric(var, expr))),
         text::keyword("DIM")
             .ignore_then(a_space)
@@ -401,7 +402,25 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
             .ignore_then(a_space)
             .ignore_then(choice((quoted_string, unquoted_string)).separated_by(just(",").padded()))
             .map(Statement::Data),
-        // TODO more
+        text::keyword("DEF")
+            .ignore_then(a_space)
+            .ignore_then(just("FN"))
+            .then(filter::<char, _, _>(|c| c.is_ascii_uppercase()))
+            .map(|(a, b)| format!("{a}{b}"))
+            .then(
+                space
+                    .ignore_then(
+                        simple_numeric_variable
+                            .padded()
+                            .delimited_by(just('('), just(')')),
+                    )
+                    .or_not(),
+            )
+            .then_ignore(a_space)
+            .then_ignore(just('='))
+            .then_ignore(a_space)
+            .then(numeric_expr)
+            .map(|((name, argument), body)| Statement::Function(name, argument, body)),
     ))
     .then_ignore(space)
     .then_ignore(text::newline());
