@@ -80,6 +80,7 @@ enum Statement {
     Let(LetStatement),
     Dim(Vec<(VarName, usize, Option<usize>)>),
     Read(Vec<Variable>),
+    Data(Vec<String>),
     Input(Vec<Variable>),
     Comment,
     Randomize,
@@ -113,6 +114,13 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
         assert!(ret > 0, "Line numbers must be positive");
         ret
     });
+
+    let unquoted_string = filter::<char, _, Simple<char>>(|c| {
+        c.is_ascii_alphanumeric() || *c == '+' || *c == '-' || *c == '.' || *c == ' '
+    })
+    .repeated()
+    .collect::<String>()
+    .map(|s| s.trim().to_owned());
 
     let quoted_string = filter(|c| *c != '\n' && *c != '"')
         .repeated()
@@ -394,6 +402,10 @@ fn parser() -> impl Parser<char, Vec<ProgramEntry>, Error = Simple<char>> {
                 )
                 .map(|(statement, vars)| statement(vars))
         },
+        text::keyword("DATA")
+            .ignore_then(a_space)
+            .ignore_then(choice((quoted_string, unquoted_string)).separated_by(just(",").padded()))
+            .map(Statement::Data),
         // TODO more
     ))
     .then_ignore(space)
